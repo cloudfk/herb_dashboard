@@ -247,3 +247,19 @@ class PrescriptionAnalyzer:
         common_targets = list(targets_a.intersection(targets_b))
         
         return common_targets, common_loops
+
+    def get_inference_data(self, target_pres):
+        """
+        Aggregates data for a single prescription to infer pathological situations.
+        Returns a dataframe joined with Herbs, Targets, Pathways, and Actions.
+        """
+        # Filter raw prescription data
+        df = self.raw_pres[self.raw_pres[self.col_pres_name] == target_pres].copy()
+        
+        # Merge with Herb Library (Herb -> Herb)
+        df = pd.merge(df, self.raw_herb, left_on=self.col_pres_herb, right_on=self.col_herb_name, how='left')
+        
+        # Merge with Pathology (Target -> Target)
+        df = pd.merge(df, self.raw_path, left_on=self.col_herb_target, right_on=self.col_path_target, how='left')
+        
+        return df
