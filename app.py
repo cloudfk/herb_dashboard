@@ -65,14 +65,10 @@ def render_inference_page(df_pres, df_herb, df_path):
             
             st.header(f"Prescription: {target_pres}")
             
-            # 1. Summary of Evidence
-            st.subheader("📋 Analysis Evidence (Pathway & Action)")
-            
-            # Group by Pathway and Action to show common themes
-            pathway_summary = df_inf.groupby(['Pathway', 'Action', 'Loop_Node']).size().reset_index(name='Count')
-            pathway_summary = pathway_summary.sort_values(by='Count', ascending=False)
-            
-            st.dataframe(pathway_summary, use_container_width=True, hide_index=True)
+            st.subheader("🎨 Physiological Interaction Palette")
+            st.info("Visualizing the flow: [Center: Herb] -> [Middle: Action] -> [Outer: Pathology Loop]")
+            fig_palette = analyzer.generate_interaction_sunburst(target_pres)
+            st.plotly_chart(fig_palette, use_container_width=True)
             
             # 2. Detailed View
             st.divider()

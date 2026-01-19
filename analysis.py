@@ -1,5 +1,7 @@
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
+import graphviz
 
 class PrescriptionAnalyzer:
     def __init__(self, df_pres, df_herb, df_path, pres_a, pres_b):
@@ -263,3 +265,81 @@ class PrescriptionAnalyzer:
         df = pd.merge(df, self.raw_path, left_on=self.col_herb_target, right_on=self.col_path_target, how='left')
         
         return df
+
+    def generate_inference_sunburst(self, target_pres):
+        df = self.get_inference_data(target_pres)
+        
+        # Prepare data for Sunburst
+        # Hierarchy: Loop_Node -> Action_Type
+        # We filter out rows where Loop or Action is missing
+        df_clean = df.dropna(subset=[self.col_path_loop, 'Action_Type']).copy()
+        
+        if df_clean.empty:
+            # Return empty figure with message
+            fig = go.Figure()
+            fig.update_layout(
+                title="No sufficient pathology data for this prescription",
+                xaxis={"visible": False},
+                yaxis={"visible": False},
+                annotations=[
+                    {
+                        "text": "No Data Available",
+                        "xref": "paper",
+                        "yref": "paper",
+                        "showarrow": False,
+                        "font": {"size": 20}
+                    }
+                ]
+            )
+            return fig
+
+        # We will use 'Amount' as the value to represent the "Strength" of the direction.
+        # This means if a Herb with high amount targets a loop, that loop gets more weight.
+        
+        fig = px.sunburst(
+            df_clean,
+            path=[self.col_path_loop, 'Action_Type'],
+            values=self.col_pres_amount,
+            color='Action_Type', # Color by Action Type to see "Activation" vs "Inhibition" clearly
+            title=f"Prescription Directionality: {target_pres}"
+        )
+        
+        fig.update_traces(textinfo="label+percent entry")
+        fig.update_layout(margin=dict(t=40, l=0, r=0, b=0))
+        
+        return fig
+
+    def generate_interaction_sunburst(self, target_pres):
+        df = self.get_inference_data(target_pres)
+        
+        # Prepare data for Sunburst
+        # Hierarchy: Herb -> Action -> Loop
+        # We need to fill NaNs to avoid holes in the chart
+        df_clean = df.fillna("Unknown")
+        
+        # Calculate weights (Amount) - distributing prescription amount across rows? 
+        # Or just count? Let's use Amount if available, or count.
+        # df already has 'Amount' from the merge.
+        
+        fig = px.sunburst(
+            df_clean,
+            path=[self.col_pres_herb, 'Action', self.col_path_loop],
+            values=self.col_pres_amount,
+            color=self.col_path_loop, # Color by Loop to keep the "Problem" context visible
+            color_discrete_sequence=px.colors.qualitative.Pastel,
+            title=f"Physiological Interaction Palette: {target_pres}"
+        )
+        
+        fig.update_layout(
+            margin=dict(t=40, l=0, r=0, b=0),
+            font=dict(family="Helvetica", size=14)
+        )
+        
+        fig.update_traces(
+            textinfo="label+percent entry",
+            insidetextorientation='radial'
+        )
+        
+        return fig
+
+

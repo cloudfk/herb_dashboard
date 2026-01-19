@@ -45,6 +45,7 @@ def preprocess_data(df_pres, df_herb, df_path):
     
     # Helper to strip strings
     def strip_strings(df):
+        if df is None: return pd.DataFrame()
         # Filter out "Unnamed" columns (empty columns in Sheet)
         df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
         
@@ -57,6 +58,7 @@ def preprocess_data(df_pres, df_herb, df_path):
 
     df_pres = strip_strings(df_pres.copy())
     df_herb = strip_strings(df_herb.copy())
+    df_path = strip_strings(df_path.copy())
     df_path = strip_strings(df_path.copy())
     
     # Validation: Check keys match expectations
