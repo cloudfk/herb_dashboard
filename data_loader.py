@@ -3,10 +3,12 @@ import pandas as pd
 import re
 import urllib.parse
 
+@st.cache_data(ttl=3600)
 def load_data():
     """
     Loads data from Google Sheets using direct CSV export (GViz API).
     This bypasses st-gsheets-connection to avoid SSL/Env issues.
+    Cached for 1 hour to support concurrent users.
     """
     try:
         # Configuration
@@ -16,8 +18,8 @@ def load_data():
         # Extracted from live sheet metadata
         gids = {
             "Prescription_Input": "221744534",      # Correct GID from user
-            "Herb_Library": "1414851403",           # Confirmed
-            "Pathology_Map": "108192910"            # Confirmed
+            "Herb_Library": "1414851403",           # Confirmed (Integrated)
+            "Prescription_script": "1443852241"     # Clinical scripts
         }
 
         # 2. Load Data using Export URL
@@ -25,22 +27,28 @@ def load_data():
         for name, gid in gids.items():
             # Use GViz API endpoint which is more robust for public access than /export
             csv_url = f"{sheet_url}/gviz/tq?tqx=out:csv&gid={gid}"
-            dfs[name] = pd.read_csv(csv_url, on_bad_lines='skip')
+            # For Prescription_script, it might not have headers, but we'll try to read it
+            if name == "Prescription_script":
+                dfs[name] = pd.read_csv(csv_url, on_bad_lines='skip', header=None)
+                # Assign manual headers based on structure: Prescription, Symptom, Explanation
+                dfs[name].columns = ['Prescription_Name', 'Symptom_Status', 'Explanation'] + [f'extra_{i}' for i in range(len(dfs[name].columns)-3)]
+            else:
+                dfs[name] = pd.read_csv(csv_url, on_bad_lines='skip')
 
         return preprocess_data(dfs.get("Prescription_Input"), 
                              dfs.get("Herb_Library"), 
-                             dfs.get("Pathology_Map"))
+                             dfs.get("Prescription_script"))
 
     except Exception as e:
         st.error(f"Live data loading failed: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-def preprocess_data(df_pres, df_herb, df_path):
+def preprocess_data(df_pres, df_herb, df_script):
     """
     Preprocesses the dataframes:
-    1. Strip whitespace from all string columns.
     2. Convert Amount to float using regex.
     3. Explode Herb_Library ingredients.
+    4. Clean Prescription_script.
     """
     
     # Helper to strip strings
@@ -57,12 +65,12 @@ def preprocess_data(df_pres, df_herb, df_path):
 
     df_pres = strip_strings(df_pres.copy())
     df_herb = strip_strings(df_herb.copy())
-    df_path = strip_strings(df_path.copy())
+    if df_script is not None:
+        df_script = strip_strings(df_script.copy())
     
     # Validation: Check keys match expectations
     required_cols = ['Prescription_Name']
     if not all(col in df_pres.columns for col in required_cols):
-        # Graceful failure with helpful message, but formatted cleanly
         st.error(f"Data Connection Successful, but column structure does not match.")
         st.write("Found Columns:", df_pres.columns.tolist())
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
@@ -74,8 +82,8 @@ def preprocess_data(df_pres, df_herb, df_path):
         df_pres[amount_col] = pd.to_numeric(df_pres[amount_col], errors='coerce').fillna(0.0)
     
     # Explode Herb_Library ingredients
-    # Debug output: 'Compound_Name (성분)'
-    ingredient_col = 'Compound_Name (성분)'
+    # Debug output: 'Compound_Name'
+    ingredient_col = 'Compound_Name'
             
     if ingredient_col in df_herb.columns:
         # Split by comma (handling optional whitespace around it)
@@ -84,4 +92,4 @@ def preprocess_data(df_pres, df_herb, df_path):
         df_herb = df_herb.explode(ingredient_col)
         df_herb[ingredient_col] = df_herb[ingredient_col].str.strip()
     
-    return df_pres, df_herb, df_path
+    return df_pres, df_herb, df_script
